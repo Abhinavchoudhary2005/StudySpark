@@ -1,11 +1,16 @@
-import { useState, useRef } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/textarea';
-import { Sparkles, Brain, FileText, Upload } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { useState, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Sparkles, Brain, FileText, Upload } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import * as pdfjsLib from "pdfjs-dist";
+import type { TextItem } from "pdfjs-dist/types/src/display/api";
+
+// pdfjs worker (important for browser)
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min?url";
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 export interface QuizQuestion {
   topic: string;
@@ -16,7 +21,7 @@ export interface QuizQuestion {
     C: string;
     D: string;
   };
-  correct_answer: 'A' | 'B' | 'C' | 'D';
+  correct_answer: "A" | "B" | "C" | "D";
   explanation: string;
 }
 
@@ -25,30 +30,70 @@ interface QuizGeneratorProps {
   className?: string;
 }
 
-export const QuizGenerator = ({ onQuizGenerated, className }: QuizGeneratorProps) => {
-  const [notes, setNotes] = useState('');
+export const QuizGenerator = ({
+  onQuizGenerated,
+  className,
+}: QuizGeneratorProps) => {
+  const [notes, setNotes] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  // --- PDF Upload & Extract ---
   const handleFileUpload = async (file: File) => {
-    if (file.type !== 'application/pdf') {
+    try {
+      setIsGenerating(true);
+
+      const fileReader = new FileReader();
+
+      fileReader.onload = async function () {
+        const typedArray = new Uint8Array(this.result as ArrayBuffer);
+
+        const pdf = await pdfjsLib.getDocument(typedArray).promise;
+        let textContent = "";
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const text = await page.getTextContent();
+
+          const pageText = text.items
+            .map((item) => {
+              if ("str" in item) {
+                return (item as TextItem).str;
+              }
+              return "";
+            })
+            .join(" ");
+
+          textContent += `\n\n${pageText}`;
+        }
+
+        // Merge PDF content with textarea notes
+        const mergedNotes = [notes.trim(), textContent.trim()]
+          .filter(Boolean)
+          .join("\n\n");
+
+        setNotes(mergedNotes);
+
+        toast({
+          title: "PDF Uploaded",
+          description: `Extracted ${pdf.numPages} pages from PDF and merged with your notes.`,
+        });
+
+        setIsGenerating(false);
+      };
+
+      fileReader.readAsArrayBuffer(file);
+    } catch (error) {
+      console.error("Error reading PDF:", error);
       toast({
-        title: "Invalid file type",
-        description: "Please upload a PDF file.",
+        title: "PDF Upload Failed",
+        description: "Could not extract text from the file. Try another PDF.",
         variant: "destructive",
       });
-      return;
+      setIsGenerating(false);
     }
-
-    // For now, we'll just show a message that PDF processing is coming soon
-    // In a real implementation, you'd extract text from the PDF here
-    toast({
-      title: "PDF Upload",
-      description: "PDF text extraction will be implemented soon. For now, please copy and paste your notes.",
-      variant: "destructive",
-    });
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -64,7 +109,6 @@ export const QuizGenerator = ({ onQuizGenerated, className }: QuizGeneratorProps
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
       handleFileUpload(files[0]);
@@ -78,28 +122,29 @@ export const QuizGenerator = ({ onQuizGenerated, className }: QuizGeneratorProps
     }
   };
 
+  // --- Generate Quiz ---
   const generateQuiz = async () => {
     if (!notes.trim()) return;
-    
+
     setIsGenerating(true);
-    
+
     try {
-      const { data, error } = await supabase.functions.invoke('generate-quiz', {
-        body: {
-          notes: notes.trim(),
-          title: 'Generated Quiz'
-        }
+      const response = await fetch("http://localhost:3001/api/generate-quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: notes.trim() }),
       });
 
-      if (error) {
-        console.error('Error generating quiz:', error);
-        toast({
-          title: "Generation Failed",
-          description: "Failed to generate quiz. Please try again.",
-          variant: "destructive",
-        });
-        return;
+      if (!response.ok) {
+        const errorData = await response
+          .json()
+          .catch(() => ({ error: "An unknown error occurred." }));
+        throw new Error(
+          errorData.error || `Request failed with status ${response.status}`
+        );
       }
+
+      const data = await response.json();
 
       if (data.questions && Array.isArray(data.questions)) {
         onQuizGenerated(data.questions);
@@ -108,13 +153,15 @@ export const QuizGenerator = ({ onQuizGenerated, className }: QuizGeneratorProps
           description: `Successfully created ${data.questions.length} questions from your notes.`,
         });
       } else {
-        throw new Error('Invalid quiz format received');
+        throw new Error("Invalid quiz format received from the server.");
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error("Error generating quiz:", error);
       toast({
         title: "Generation Failed",
-        description: "An error occurred while generating the quiz. Please try again.",
+        description:
+          error.message ||
+          "An unexpected error occurred. Please check the console and try again.",
         variant: "destructive",
       });
     } finally {
@@ -130,21 +177,26 @@ export const QuizGenerator = ({ onQuizGenerated, className }: QuizGeneratorProps
         </div>
         <CardTitle className="text-xl font-bold">AI Quiz Generator</CardTitle>
         <p className="text-muted-foreground">
-          Paste your notes below and let StudySpark create a personalized quiz
+          Paste your notes below or upload a PDF and let StudySpark create a
+          personalized quiz
         </p>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-2">
-          <label htmlFor="notes" className="text-sm font-medium flex items-center gap-2">
+          <label
+            htmlFor="notes"
+            className="text-sm font-medium flex items-center gap-2"
+          >
             <FileText className="h-4 w-4" />
             Your Study Notes
           </label>
-          
-          {/* PDF Upload Area */}
+
           <div
             className={cn(
               "border-2 border-dashed rounded-lg p-4 text-center transition-colors",
-              isDragging ? "border-primary bg-primary/5" : "border-muted-foreground/25",
+              isDragging
+                ? "border-primary bg-primary/5"
+                : "border-muted-foreground/25",
               "hover:border-primary hover:bg-primary/5 cursor-pointer"
             )}
             onDragOver={handleDragOver}
@@ -154,13 +206,14 @@ export const QuizGenerator = ({ onQuizGenerated, className }: QuizGeneratorProps
           >
             <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
             <p className="text-sm text-muted-foreground">
-              <span className="font-semibold">Click to upload PDF</span> or drag and drop
+              <span className="font-semibold">Click to upload PDF</span> or drag
+              and drop
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Or paste your notes in the text area below
+              (Or paste your notes in the text area below)
             </p>
           </div>
-          
+
           <input
             ref={fileInputRef}
             type="file"
@@ -168,18 +221,18 @@ export const QuizGenerator = ({ onQuizGenerated, className }: QuizGeneratorProps
             onChange={handleFileSelect}
             className="hidden"
           />
-          
+
           <Textarea
             id="notes"
-            placeholder="Paste your notes here... StudySpark will analyze them and create targeted questions to test your understanding."
+            placeholder="Paste your notes here... StudySpark will analyze them and create targeted questions."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             className="min-h-[200px] resize-none"
           />
         </div>
-        
-        <Button 
-          onClick={generateQuiz} 
+
+        <Button
+          onClick={generateQuiz}
           disabled={!notes.trim() || isGenerating}
           className="w-full bg-gradient-accent hover:opacity-90 transition-opacity shadow-glow"
           size="lg"
@@ -187,7 +240,7 @@ export const QuizGenerator = ({ onQuizGenerated, className }: QuizGeneratorProps
           {isGenerating ? (
             <div className="flex items-center gap-2">
               <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-              Generating Quiz...
+              Processing...
             </div>
           ) : (
             <div className="flex items-center gap-2">
