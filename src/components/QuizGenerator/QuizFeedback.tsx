@@ -11,6 +11,8 @@ export default function QuizFeedbackComponent({
 
   const { feedback, score } = quizFeedback;
   const scorePercentage = score.percentage;
+
+  // Color coding for score
   const scoreColor =
     scorePercentage >= 80
       ? "text-green-800 bg-green-100 border-green-300"
@@ -20,11 +22,12 @@ export default function QuizFeedbackComponent({
 
   return (
     <div className={`p-4 border rounded-lg text-sm ${scoreColor}`}>
-      <h3 className="font-bold text-lg mb-2">✅ Quiz Feedback</h3>
+      <h3 className="font-bold text-lg mb-2">🤖 AI-Generated Quiz Feedback</h3>
       <p className="font-semibold">
         Score: {score.correct} / {score.total} ({scorePercentage.toFixed(1)}%)
       </p>
       <p className="mt-2 mb-4 font-medium">{score.summary}</p>
+
       <div className="space-y-3">
         {feedback.map((q, idx) => (
           <div
@@ -38,7 +41,7 @@ export default function QuizFeedbackComponent({
             </p>
             <p>Your answer: {q.user_answer || "Not answered"}</p>
             <p>Correct answer: {q.correct_answer}</p>
-            <p className="text-sm mt-1">{q.explanation}</p>
+            <p className="text-sm mt-1 italic text-gray-700">{q.explanation}</p>
           </div>
         ))}
       </div>

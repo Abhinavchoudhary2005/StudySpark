@@ -1,12 +1,14 @@
 import { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Sparkles, Brain, BookOpen } from "lucide-react";
+import { Sparkles, Brain, BookOpen, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import NotesUploader from "./NotesUploader";
 import Summary from "./Summary";
 import QuizFeedbackComponent from "./QuizFeedback";
+import TopicsButton from "./TopicsButton";
+import Chatbot from "./Chatbot";
 
 // --- Types ---
 export interface QuizQuestion {
@@ -48,9 +50,11 @@ export const QuizGenerator = forwardRef<QuizGeneratorRef, QuizGeneratorProps>(
   ({ onQuizGenerated, className }, ref) => {
     const [notes, setNotes] = useState("");
     const [summary, setSummary] = useState("");
-    const [isGenerating, setIsGenerating] = useState(false);
     const [quiz, setQuiz] = useState<QuizQuestion[] | null>(null);
     const [quizFeedback, setQuizFeedback] = useState<QuizFeedback | null>(null);
+
+    const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+    const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
     const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
 
     const { toast } = useToast();
@@ -73,10 +77,42 @@ export const QuizGenerator = forwardRef<QuizGeneratorRef, QuizGeneratorProps>(
       if (summary) localStorage.setItem("studyspark-summary", summary);
     }, [summary]);
 
+    // --- Update Topics in LocalStorage ---
+    const updateCoveredTopics = (topics: string[]) => {
+      try {
+        const stored = localStorage.getItem("StudySpark-Topics");
+        let studySpark;
+        if (stored) {
+          studySpark = JSON.parse(stored);
+        } else {
+          studySpark = { topics: [], covered: {} };
+        }
+
+        // Ensure topics list exists
+        if (!Array.isArray(studySpark.topics)) {
+          studySpark.topics = [];
+        }
+        if (!studySpark.covered) {
+          studySpark.covered = {};
+        }
+
+        topics.forEach((topic) => {
+          if (!studySpark.topics.includes(topic)) {
+            studySpark.topics.push(topic);
+          }
+          studySpark.covered[topic] = true; // mark as covered
+        });
+
+        localStorage.setItem("StudySpark-Topics", JSON.stringify(studySpark));
+      } catch (err) {
+        console.error("Failed to update StudySpark-Topics:", err);
+      }
+    };
+
     // --- Generate Summary ---
     const generateSummary = async () => {
       if (!notes.trim()) return;
-      setIsGenerating(true);
+      setIsGeneratingSummary(true);
       try {
         const res = await fetch("http://localhost:3001/api/summary", {
           method: "POST",
@@ -85,11 +121,14 @@ export const QuizGenerator = forwardRef<QuizGeneratorRef, QuizGeneratorProps>(
         });
         const data = await res.json();
         setSummary(data.summary || "");
-        toast({ title: "Summary generated!" });
+        toast({ title: "✅ Summary generated!" });
       } catch {
-        toast({ title: "Failed to generate summary", variant: "destructive" });
+        toast({
+          title: "❌ Failed to generate summary",
+          variant: "destructive",
+        });
       } finally {
-        setIsGenerating(false);
+        setIsGeneratingSummary(false);
       }
     };
 
@@ -97,7 +136,7 @@ export const QuizGenerator = forwardRef<QuizGeneratorRef, QuizGeneratorProps>(
     const generateQuiz = async () => {
       const source = summary.trim() || notes.trim();
       if (!source) return;
-      setIsGenerating(true);
+      setIsGeneratingQuiz(true);
       setQuizFeedback(null);
 
       try {
@@ -111,24 +150,30 @@ export const QuizGenerator = forwardRef<QuizGeneratorRef, QuizGeneratorProps>(
           setQuiz(data.questions);
           onQuizGenerated(data.questions);
           toast({
-            title: `Quiz Generated: ${data.questions.length} questions`,
+            title: `📝 Quiz Generated: ${data.questions.length} questions`,
           });
         }
       } catch {
-        toast({ title: "Failed to generate quiz", variant: "destructive" });
+        toast({
+          title: "❌ Failed to generate quiz",
+          variant: "destructive",
+        });
       } finally {
-        setIsGenerating(false);
+        setIsGeneratingQuiz(false);
       }
     };
 
     // --- Submit Quiz Feedback ---
     const submitQuizFeedback = async (userAnswers: Record<number, string>) => {
       if (!quiz) {
-        toast({ title: "No quiz to submit", variant: "destructive" });
+        toast({
+          title: "⚠️ No quiz to submit",
+          variant: "destructive",
+        });
         return;
       }
 
-      setIsGeneratingFeedback(true); // Show feedback loading
+      setIsGeneratingFeedback(true);
 
       try {
         const res = await fetch("http://localhost:3001/api/quiz-feedback", {
@@ -138,16 +183,26 @@ export const QuizGenerator = forwardRef<QuizGeneratorRef, QuizGeneratorProps>(
         });
         const data: QuizFeedback = await res.json();
         setQuizFeedback(data);
-        toast({ title: "Feedback Ready!" });
+
+        // 🔑 Update topics in localStorage after quiz
+        const coveredTopics = quiz.map((q) => q.topic);
+        updateCoveredTopics(coveredTopics);
+
+        toast({ title: "🎉 Feedback Ready! Topics updated." });
       } catch {
-        toast({ title: "Failed to get feedback", variant: "destructive" });
+        toast({
+          title: "❌ Failed to get feedback",
+          variant: "destructive",
+        });
       } finally {
         setIsGeneratingFeedback(false);
       }
     };
 
     // Expose submit function to parent
-    useImperativeHandle(ref, () => ({ submitQuizFeedback }));
+    useImperativeHandle(ref, () => ({
+      submitQuizFeedback,
+    }));
 
     return (
       <Card className={cn("shadow-soft", className)}>
@@ -163,40 +218,75 @@ export const QuizGenerator = forwardRef<QuizGeneratorRef, QuizGeneratorProps>(
           </p>
         </CardHeader>
 
-        <CardContent className="space-y-6">
-          <NotesUploader
-            notes={notes}
-            setNotes={setNotes}
-            setIsGenerating={setIsGenerating}
-          />
-
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Button
-              onClick={generateSummary}
-              disabled={!notes.trim() || isGenerating}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              <BookOpen className="mr-2 h-4 w-4" /> Generate Summary
-            </Button>
-
-            <Button
-              onClick={generateQuiz}
-              disabled={!(summary.trim() || notes.trim()) || isGenerating}
-              className="flex-1 bg-gradient-accent hover:opacity-90 shadow-glow"
-            >
-              <Sparkles className="mr-2 h-4 w-4" /> Take Quiz
-            </Button>
+        <CardContent className="flex gap-5">
+          {/* Left Half */}
+          <div className="w-1/3">
+            <TopicsButton pdfName={"StudySpark-Topics"} pdfText={notes} />
           </div>
 
-          <Summary summary={summary} />
+          {/* Right Half */}
+          <div className="w-2/3 space-y-6">
+            <NotesUploader
+              notes={notes}
+              setNotes={setNotes}
+              setIsGenerating={() => {}}
+            />
 
-          {isGeneratingFeedback ? (
-            <div className="text-center text-blue-600 font-semibold">
-              Generating Feedback...
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                onClick={generateSummary}
+                disabled={!notes.trim() || isGeneratingSummary}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {isGeneratingSummary ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <BookOpen className="mr-2 h-4 w-4" /> Generate Summary
+                  </>
+                )}
+              </Button>
+
+              <Button
+                onClick={generateQuiz}
+                disabled={!(summary.trim() || notes.trim()) || isGeneratingQuiz}
+                className="flex-1 bg-gradient-accent hover:opacity-90 shadow-glow"
+              >
+                {isGeneratingQuiz ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Preparing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" /> Take Quiz
+                  </>
+                )}
+              </Button>
             </div>
-          ) : (
-            <QuizFeedbackComponent quizFeedback={quizFeedback} />
-          )}
+
+            {/* Summary */}
+            {isGeneratingSummary ? (
+              <div className="text-center text-blue-600 font-semibold">
+                Generating Summary...
+              </div>
+            ) : (
+              <Summary summary={summary} />
+            )}
+
+            {/* Feedback */}
+            {isGeneratingFeedback ? (
+              <div className="text-center text-blue-600 font-semibold">
+                Generating Feedback...
+              </div>
+            ) : (
+              <QuizFeedbackComponent quizFeedback={quizFeedback} />
+            )}
+          </div>
         </CardContent>
       </Card>
     );

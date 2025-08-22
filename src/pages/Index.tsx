@@ -6,6 +6,7 @@ import type { QuizQuestion } from "@/components/QuizGenerator/types";
 import { Sparkles, Brain, Upload, BookOpen, Zap } from "lucide-react";
 import { Toaster } from "@/components/ui/toaster";
 import { QuizDisplay } from "@/components/QuizGenerator/QuizDisplay";
+import Chatbot from "@/components/QuizGenerator/Chatbot";
 
 const Index = () => {
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[] | null>(
@@ -47,8 +48,9 @@ const Index = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
+        <Chatbot />
         {!quizQuestions ? (
-          <div className="max-w-4xl mx-auto space-y-8">
+          <div className=" mx-auto space-y-8">
             {/* Hero Section */}
             <div className="text-center space-y-6">
               <div className="space-y-4">
@@ -112,7 +114,7 @@ const Index = () => {
             </div>
 
             {/* Quiz Generator */}
-            <div className="max-w-2xl mx-auto">
+            <div className=" mx-auto">
               <QuizGenerator onQuizGenerated={handleQuizGenerated} />
             </div>
           </div>
