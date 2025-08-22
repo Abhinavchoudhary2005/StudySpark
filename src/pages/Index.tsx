@@ -1,12 +1,16 @@
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { QuizGenerator, QuizQuestion } from '@/components/QuizGenerator';
-import { QuizDisplay } from '@/components/QuizDisplay';
-import { Sparkles, Brain, Upload, BookOpen, Zap } from 'lucide-react';
-import { Toaster } from '@/components/ui/toaster';
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { QuizGenerator } from "@/components/QuizGenerator/QuizGenerator";
+import type { QuizQuestion } from "@/components/QuizGenerator/types";
+
+import { Sparkles, Brain, Upload, BookOpen, Zap } from "lucide-react";
+import { Toaster } from "@/components/ui/toaster";
+import { QuizDisplay } from "@/components/QuizGenerator/QuizDisplay";
 
 const Index = () => {
-  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[] | null>(null);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[] | null>(
+    null
+  );
 
   const handleQuizGenerated = (quiz: QuizQuestion[]) => {
     setQuizQuestions(quiz);
@@ -28,7 +32,9 @@ const Index = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold">StudySpark</h1>
-                <p className="text-sm text-muted-foreground">AI-Powered Quiz Generator</p>
+                <p className="text-sm text-muted-foreground">
+                  AI-Powered Quiz Generator
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -47,10 +53,12 @@ const Index = () => {
             <div className="text-center space-y-6">
               <div className="space-y-4">
                 <h2 className="text-4xl font-bold">
-                  Upload <span className="text-primary">PDF's</span> or Paste <span className="text-primary">Your Notes</span>
+                  Upload <span className="text-primary">PDF's</span> or Paste{" "}
+                  <span className="text-primary">Your Notes</span>
                 </h2>
                 <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-                  Upload your PDF or paste your notes and let our AI create personalized quizzes! ✨
+                  Upload your PDF or paste your notes and let our AI create
+                  personalized quizzes! ✨
                 </p>
               </div>
 
@@ -65,7 +73,8 @@ const Index = () => {
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-muted-foreground">
-                      Drag & drop your PDF files or browse to select them. Supports all standard PDF formats.
+                      Drag & drop your PDF files or browse to select them.
+                      Supports all standard PDF formats.
                     </p>
                   </CardContent>
                 </Card>
@@ -79,7 +88,8 @@ const Index = () => {
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-muted-foreground">
-                      Our AI analyzes your content and identifies key concepts to create targeted questions.
+                      Our AI analyzes your content and identifies key concepts
+                      to create targeted questions.
                     </p>
                   </CardContent>
                 </Card>
@@ -93,7 +103,8 @@ const Index = () => {
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-muted-foreground">
-                      Get personalized multiple-choice quizzes generated in seconds to test your knowledge.
+                      Get personalized multiple-choice quizzes generated in
+                      seconds to test your knowledge.
                     </p>
                   </CardContent>
                 </Card>
@@ -107,10 +118,7 @@ const Index = () => {
           </div>
         ) : (
           <div className="max-w-3xl mx-auto">
-            <QuizDisplay 
-              questions={quizQuestions} 
-              onReset={handleQuizReset}
-            />
+            <QuizDisplay questions={quizQuestions} onReset={handleQuizReset} />
           </div>
         )}
       </main>
@@ -119,7 +127,9 @@ const Index = () => {
       <footer className="mt-20 border-t bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-8">
           <div className="text-center text-sm text-muted-foreground">
-            <p>StudySpark - Transforming learning with AI-powered quiz generation</p>
+            <p>
+              StudySpark - Transforming learning with AI-powered quiz generation
+            </p>
           </div>
         </div>
       </footer>
